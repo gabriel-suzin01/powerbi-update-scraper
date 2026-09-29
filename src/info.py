@@ -1,7 +1,7 @@
 """
-    Módulo responsável por coletar as informações do Power BI Online via webscrapping.
-    Os principais dados coletados são: data hora de última atualização, atualizado hoje,
-    erro na última atualização e data hora da próxima atualização.
+Módulo responsável por coletar as informações do Power BI Online via webscrapping.
+Os principais dados coletados são: data hora de última atualização, atualizado hoje,
+erro na última atualização e data hora da próxima atualização.
 """
 
 import sys
@@ -19,7 +19,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 from src.common import CHROME_SERVICE, WEBDRIVER_OPTIONS, TIMEOUT
-from src.common import get_access_token, get_device_code, interact_with_ui, wait, wait_loading
+from src.common import (
+    get_access_token,
+    get_device_code,
+    interact_with_ui,
+    wait,
+    wait_loading,
+)
 from src.setup import Logger, get_env_values
 
 BASE_URL = "https://app.powerbi.com/groups/"
@@ -28,16 +34,17 @@ LOGIN_WORDS = ("singleSignOn", "signin", "login")
 MAX_RETRIES = 3
 RETRY_DELAY = 5
 
-SCOPE = "https://analysis.windows.net/powerbi/api/.default" # escopo de permissividade
+SCOPE = "https://analysis.windows.net/powerbi/api/.default"  # escopo de permissividade
+
 
 class WebExtractor:
     """
-        Classe responsável por coletar os dados do Power BI Online.
-        As informações são coletadas workspace por workspace.
+    Classe responsável por coletar os dados do Power BI Online.
+    As informações são coletadas workspace por workspace.
 
-        Métodos:
-        - get_workspaces(): Pega todos os workspaces existentes em um diretório Azure.
-        - get_info(): Método principal que executa a coleta dos dados.
+    Métodos:
+    - get_workspaces(): Pega todos os workspaces existentes em um diretório Azure.
+    - get_info(): Método principal que executa a coleta dos dados.
     """
 
     def __init__(self) -> None:
@@ -51,10 +58,10 @@ class WebExtractor:
 
     def __login(self, url: str) -> None:
         """
-            Método usado para fazer a autenticação ao Power BI Online, caso solicitado.
+        Método usado para fazer a autenticação ao Power BI Online, caso solicitado.
 
-            Parâmetros:
-            - url (str): url que a autenticação foi solicitada.
+        Parâmetros:
+        - url (str): url que a autenticação foi solicitada.
         """
 
         if not any(word in url for word in LOGIN_WORDS):
@@ -64,20 +71,24 @@ class WebExtractor:
             try:
                 if not self.__driver:
                     service = Service(ChromeDriverManager().install())
-                    self.__driver = webdriver.Chrome(service=service, options=self.__options)
-                elif not any(word in url for word in ["singleSignOn", "signin", "login"]):
+                    self.__driver = webdriver.Chrome(
+                        service=service, options=self.__options
+                    )
+                elif not any(
+                    word in url for word in ["singleSignOn", "signin", "login"]
+                ):
                     return
                 self.__driver.get(url)
 
                 interact_with_ui(
                     driver=self.__driver,
                     css="[id='email']",
-                    value=get_env_values().get('EMAIL')
+                    value=get_env_values().get("EMAIL"),
                 )
                 interact_with_ui(
                     driver=self.__driver,
                     css="[id='i0118']",
-                    value=get_env_values().get('PASSWORD')
+                    value=get_env_values().get("PASSWORD"),
                 )
 
                 try:
@@ -90,7 +101,9 @@ class WebExtractor:
             except WebDriverException as error:
                 Logger.error("[Selenium] Tentativa %s. Erro: %s", attempt, error)
                 if attempt < MAX_RETRIES:
-                    Logger.info("[Selenium] Tentando novamente em %s segundos...", RETRY_DELAY)
+                    Logger.info(
+                        "[Selenium] Tentando novamente em %s segundos...", RETRY_DELAY
+                    )
                     time.sleep(RETRY_DELAY)
                 else:
                     Logger.critical("[Selenium] Todas as tentativas de login falharam!")
@@ -98,11 +111,11 @@ class WebExtractor:
 
     def __read_info(self, url: str) -> None:
         """
-            Método responsável por fazer a leitura, workspace por workspace.
-            Os dados recolhidos serão utilizados posteriormente na tela de monitoramento.
+        Método responsável por fazer a leitura, workspace por workspace.
+        Os dados recolhidos serão utilizados posteriormente na tela de monitoramento.
 
-            Parâmetros:
-            - url (str): url do workspace que deve ser feita a leitura dos dados.
+        Parâmetros:
+        - url (str): url do workspace que deve ser feita a leitura dos dados.
         """
 
         for attempt in range(1, MAX_RETRIES + 1, 1):
@@ -116,9 +129,11 @@ class WebExtractor:
                 self.__driver.get(url)
                 wait_loading(self.__driver)
 
-                wait(self.__driver).until(EC.presence_of_element_located(
-                    (By.TAG_NAME, "cdk-virtual-scroll-viewport")
-                ))
+                wait(self.__driver).until(
+                    EC.presence_of_element_located(
+                        (By.TAG_NAME, "cdk-virtual-scroll-viewport")
+                    )
+                )
 
                 soup = BeautifulSoup(self.__driver.page_source, "html.parser")
 
@@ -128,15 +143,23 @@ class WebExtractor:
                     soup,
                     (
                         "h1",
-                        {"class": ["workspace-name", "tri-text-overflow-ellipsis", "tri-subtitle1"]}
-                    )
+                        {
+                            "class": [
+                                "workspace-name",
+                                "tri-text-overflow-ellipsis",
+                                "tri-subtitle1",
+                            ]
+                        },
+                    ),
                 )
 
-                if info := soup.find("cdk-virtual-scroll-viewport", {"id": "artifactContentView"}):
+                info = soup.find("fluent-workspace", {"class": "ng-star-inserted"})
+
+                if info:
                     info = info.find(
-                        "div", 
-                        {"class": "cdk-virtual-scroll-content-wrapper"}
+                        "div", {"class": "cdk-virtual-scroll-content-wrapper"}
                     )
+
                 if not info:
                     return
 
@@ -144,43 +167,72 @@ class WebExtractor:
 
                 execution_data = {}
 
-                for row in info.find_all("div", {"role": "row"}):
+                for row in info.find_all("div", {"class": "row", "role": "row"}):
                     # Logger.debug(row.prettify()) --> somente usado para testes
 
                     name = self.__safe_get_text(
-                        row.find("span", {"class": "name-container"}),
-                        ("a", {"class": ["name", "trimmedTextWithEllipsis", "ng-star-inserted"]})
+                        row.find("span", {"class": "col-name"}),
+                        (
+                            "a",
+                            {
+                                "class": [
+                                    "name",
+                                    "trimmedTextWithEllipsis",
+                                    "ng-star-inserted",
+                                ]
+                            },
+                        ),
                     )
 
-                    file_type = (
-                        row.find("span", {"data-testid": "fluentListCell.type"}) or {}
-                    ).get("title", "Desconhecido")
+                    file_type = self.__safe_get_text(
+                        row.find("span", {"class": "col-type"}),
+                        ("span", {"class": "trimmedTextWithEllipsis"}),
+                    )
 
                     if file_type == "Pasta":
                         continue
 
-                    last_refresh = (
-                        row.find("span", {"data-testid": "fluentListCell.lastRefresh"}) or {}
-                    ).get("title", "Desconhecida.")
+                    last_refresh = self.__safe_get_text(
+                        row.find("span", {"class": "col-last-refresh"}),
+                        ("span", {"class": "trimmedTextWithEllipsis"}),
+                    )
 
                     update_check = {
-                        "button": row.find("span", {"class": "dataflow-refresh-icons"}).find(
-                            "button",
-                            {"class": ["glyphicon", "pbi-glyph-warning", "ng-star-inserted"]}
-                        ) if row.find("span", {"class": "dataflow-refresh-icons"}) else None,
+                        "button": (
+                            row.find("span", {"class": "dataflow-refresh-icons"}).find(
+                                "button",
+                                {
+                                    "class": [
+                                        "glyphicon",
+                                        "pbi-glyph-warning",
+                                        "ng-star-inserted",
+                                    ]
+                                },
+                            )
+                            if row.find("span", {"class": "dataflow-refresh-icons"})
+                            else None
+                        ),
                         "icon": row.find(
                             "i",
-                            {"class": ["warning", "glyphicon", "pbi-glyph-warning", "glyph-small"]}
-                        )
+                            {
+                                "class": [
+                                    "warning",
+                                    "glyphicon",
+                                    "pbi-glyph-warning",
+                                    "glyph-small",
+                                ]
+                            },
+                        ),
                     }
 
                     update_check = bool(update_check["icon"] or update_check["button"])
 
                     # implementar lógica de atualizar automaticamente no futuro
 
-                    next_upt = (
-                        row.find("span", {"data-testid": "fluentListCell.nextRefresh"}) or {}
-                    ).get("title", "Desconhecida.")
+                    next_upt = self.__safe_get_text(
+                        row.find("span", {"class": "col-next-refresh"}),
+                        ("span", {"class": "trimmedTextWithEllipsis"}),
+                    )
 
                     if workspace_name not in execution_data:
                         execution_data[workspace_name] = {}
@@ -191,10 +243,11 @@ class WebExtractor:
                     execution_data[workspace_name][name] = {
                         "tipo": file_type,
                         "last_update": last_refresh,
-                        "atualizado_hoje": last_refresh[0:9] == self.__current_date[0:9],
-                        "update_success": not update_check, # inverte: se tiver valor, deu erro
+                        "atualizado_hoje": last_refresh[0:9]
+                        == self.__current_date[0:9],
+                        "update_success": not update_check,  # inverte: se tiver valor, deu erro
                         "next_update": next_upt,
-                        "agendamento_cancelado": next_upt == "N/D"
+                        "agendamento_cancelado": next_upt == "N/D",
                     }
 
                 if self.__current_date not in self.__json:
@@ -202,21 +255,27 @@ class WebExtractor:
                 self.__json[self.__current_date].update(execution_data)
                 return
             except WebDriverException as error:
-                Logger.error("[Selenium] Tentativa %s falhou - %s. Erro: %s", attempt, url, error)
+                Logger.error(
+                    "[Selenium] Tentativa %s falhou - %s. Erro: %s", attempt, url, error
+                )
                 if attempt < MAX_RETRIES:
-                    Logger.info("[Selenium] Tentando novamente em %s segundos...", RETRY_DELAY)
+                    Logger.info(
+                        "[Selenium] Tentando novamente em %s segundos...", RETRY_DELAY
+                    )
                     time.sleep(RETRY_DELAY)
                 else:
-                    Logger.critical("[Selenium] Todas as tentativas falharam para: %s", url)
+                    Logger.critical(
+                        "[Selenium] Todas as tentativas falharam para: %s", url
+                    )
 
     def __safe_get_text(self, parent: Tag, selector: tuple[str, dict] | None) -> str:
         """
-            Função que realiza a sanitização: verifica se existe ou não o elemento.
-            Caso não existir, retorna "Desconhecido".
+        Função que realiza a sanitização: verifica se existe ou não o elemento.
+        Caso não existir, retorna "Desconhecido".
 
-            Parâmetros:
-            - parent (Tag): Elemento pai do elemento a ser procurado, "selector".
-            - selector (tuple[str, dict] | None): Elemento a ser pego o texto.
+        Parâmetros:
+        - parent (Tag): Elemento pai do elemento a ser procurado, "selector".
+        - selector (tuple[str, dict] | None): Elemento a ser pego o texto.
         """
 
         tag = parent.find(*selector) if parent else None
@@ -225,8 +284,8 @@ class WebExtractor:
     @property
     def workspaces(self) -> list:
         """
-            Função responsável por pegar os workspaces do diretório.
-            Retorna os workspaces no formato de lista.
+        Função responsável por pegar os workspaces do diretório.
+        Retorna os workspaces no formato de lista.
         """
 
         for attempt in range(1, MAX_RETRIES + 1, 1):
@@ -234,20 +293,24 @@ class WebExtractor:
                 workspaces_url = "https://api.powerbi.com/v1.0/myorg/groups"
 
                 code = get_device_code(
-                    get_env_values().get('TENANT_ID'),
-                    get_env_values().get('CLIENT_ID'),
-                    SCOPE
+                    get_env_values().get("TENANT_ID"),
+                    get_env_values().get("CLIENT_ID"),
+                    SCOPE,
                 )
 
-                self.__driver = webdriver.Chrome(service=CHROME_SERVICE, options=self.__options)
+                self.__driver = webdriver.Chrome(
+                    service=CHROME_SERVICE, options=self.__options
+                )
 
-                self.__access_token = get_access_token(driver=self.__driver, device_code_json=code)
+                self.__access_token = get_access_token(
+                    driver=self.__driver, device_code_json=code
+                )
 
-                headers = {
-                    "Authorization": f"Bearer {self.__access_token}" 
-                }
+                headers = {"Authorization": f"Bearer {self.__access_token}"}
 
-                response = requests.get(url=workspaces_url, headers=headers, timeout=TIMEOUT)
+                response = requests.get(
+                    url=workspaces_url, headers=headers, timeout=TIMEOUT
+                )
                 response.raise_for_status()
                 response = response.json()
 
@@ -260,7 +323,9 @@ class WebExtractor:
             except WebDriverException as error:
                 Logger.error("[Selenium] Tentativa %s. Erro: %s", attempt, error)
                 if attempt < MAX_RETRIES:
-                    Logger.info("[Selenium] Tentando novamente em %s segundos...", RETRY_DELAY)
+                    Logger.info(
+                        "[Selenium] Tentando novamente em %s segundos...", RETRY_DELAY
+                    )
                     time.sleep(RETRY_DELAY)
                 else:
                     Logger.critical("[Selenium] Não foi possível pegar as workspaces!")
@@ -269,8 +334,8 @@ class WebExtractor:
 
     def get_info(self) -> dict:
         """
-            Método que gerencia toda a classe.
-            Faz login quando necessário, pega as workspaces e coleta dos dados.
+        Método que gerencia toda a classe.
+        Faz login quando necessário, pega as workspaces e coleta dos dados.
         """
 
         for url in self.workspaces:
@@ -278,4 +343,3 @@ class WebExtractor:
 
         self.__driver.quit()
         return self.__json
-    
